@@ -1,9 +1,9 @@
 {
   "app": "python3 app.py",
   "context": {
-    "account": "123456789012",
-    "region": "ap-southeast-2",
-    "schedule": "rate(5 minutes)",
+    "account": "992382557570",
+    "region": "us-east-1",
+    "schedule": "rate(2 minutes)",
     "stream_retention_hours": 24
   }
 }

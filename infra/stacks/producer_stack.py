@@ -1,3 +1,4 @@
+# infra/stacks/producer_stack.py
 import os
 from aws_cdk import (
     Stack,
@@ -6,6 +7,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_events as events,
     aws_events_targets as targets,
+    aws_ecr_assets as ecr_assets,   # ⬅️ add this
 )
 from constructs import Construct
 
@@ -13,32 +15,37 @@ class ProducerStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, stream, **kwargs):
         super().__init__(scope, construct_id, **kwargs)
 
-        lambda_fn = _lambda.Function(
+        lambda_fn = _lambda.DockerImageFunction(
             self, "ProducerFunction",
-            runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="app.handler",
-            code=_lambda.Code.from_asset(
-                os.path.join("..", "src", "producer_lambda")
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory=os.path.join("..", "src", "producer_lambda_image"),
+                file="Dockerfile",
+                platform=ecr_assets.Platform.LINUX_AMD64,   # ⬅️ use ecr_assets.Platform
             ),
-            timeout=Duration.seconds(15),
-            environment={"STREAM_NAME": stream.stream_name},
-            description="Emits events to Kinesis on a schedule"
+            architecture=_lambda.Architecture.X86_64,       # good to set explicitly
+            timeout=Duration.seconds(60),
+            memory_size=1024,
+            environment={
+                "STREAM_NAME": stream.stream_name,
+                "TICKER": "MSFT",
+                "PERIOD": "1d",
+                "INTERVAL": "1m",
+                "DRY_RUN": "false",
+            },
+            description="Fetches ticker data (yfinance) and writes to Kinesis",
         )
 
-        # Least privilege: only write to the specific stream
         stream.grant_write(lambda_fn)
 
-        # CloudWatch Logs permissions (basic)
         lambda_fn.add_to_role_policy(iam.PolicyStatement(
             actions=["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
             resources=["*"]
         ))
 
-        # EventBridge schedule from context
         schedule_expr = self.node.try_get_context("schedule") or "rate(5 minutes)"
         rule = events.Rule(
             self, "ProducerSchedule",
             schedule=events.Schedule.expression(schedule_expr),
-            description=f"Triggers ProducerFunction on {schedule_expr}"
         )
         rule.add_target(targets.LambdaFunction(lambda_fn))
+
