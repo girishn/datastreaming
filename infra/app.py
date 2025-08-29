@@ -2,6 +2,8 @@
 import aws_cdk as cdk
 from stacks.kinesis_stack import KinesisStack
 from stacks.producer_stack import ProducerStack
+from stacks.s3_stack import S3Stack
+
 
 app = cdk.App()
 
@@ -15,6 +17,12 @@ ProducerStack(
     app,
     "ProducerStack",
     stream=kinesis.stream,
+    env=env
+)
+
+S3Stack(
+    app,
+    "S3Stack",
     env=env
 )
 
