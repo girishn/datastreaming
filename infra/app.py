@@ -32,13 +32,14 @@ flink = FlinkAppStack(
     "FlinkAppStack",
     env=env,
     code_bucket=code_bucket.s3,
-    jar_object_key="artifacts/KinesisS3Sink-1.0-SNAPSHOT.jar",
+    jar_object_key="KinesisS3Sink-1.0-SNAPSHOT.jar",
     source_stream=kinesis.stream,
     app_name="KinesisS3Sink",
     kinesis_initial_position="TRIM_HORIZON",
     runtime_environment="FLINK-1_20",
 )
 
+# Ensure FlinkAppStack waits for S3Stack to complete
 flink.add_dependency(code_bucket)
 
 app.synth()

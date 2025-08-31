@@ -1,5 +1,6 @@
 import os
 from config import S3Config
+import aws_cdk as cdk
 
 from aws_cdk import (
     Stack,
@@ -19,10 +20,18 @@ class S3Stack(Stack):
             bucket_name=S3Config.S3_BUCKET_NAME,
         )
 
-        file_path = os.path.join(os.path.dirname(__file__), S3Config.JAR_FILE_PATH)
+        
+        artifacts_dir = os.path.dirname(os.path.join(
+            os.path.dirname(__file__), S3Config.JAR_FILE_PATH
+        ))
 
-        # Deploy the jar file to the S3 bucket
-        s3deploy.BucketDeployment(self, "DeployJarFile",
-            sources=[s3deploy.Source.asset(file_path)],
-            destination_bucket=self.s3
+        s3deploy.BucketDeployment(
+            self, "DeployJarFile",
+            sources=[s3deploy.Source.asset(artifacts_dir)],
+            destination_bucket=self.s3,
+            destination_key_prefix="",
+            prune=False,
+            retain_on_delete=True,
+            memory_limit=1024,
         )
+

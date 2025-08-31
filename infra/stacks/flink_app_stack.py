@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_kinesis as kinesis,
     aws_kinesisanalytics as kda,
+    aws_kms as kms,
     custom_resources as cr,
 )
 from constructs import Construct
@@ -42,7 +43,13 @@ class FlinkAppStack(Stack):
         )
 
         # Read the JAR from S3 (grants GetObject and KMS decrypt if bucket uses KMS)
-        code_bucket.grant_read(kda_role, jar_object_key)
+        code_bucket.grant_read(kda_role)
+
+        # If the bucket has an encryption key, grant decrypt permissions
+        encryption_key = getattr(code_bucket, "encryption_key", None)
+        if encryption_key:
+            encryption_key.grant_decrypt(kda_role)
+
 
         # Allow reading from the Kinesis source stream
         kda_role.add_to_policy(
