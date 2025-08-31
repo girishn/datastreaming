@@ -42,7 +42,7 @@ class FlinkAppStack(Stack):
         )
 
         # Read the JAR from S3 (grants GetObject and KMS decrypt if bucket uses KMS)
-        code_bucket.grant_read_write(kda_role, jar_object_key)
+        code_bucket.grant_read(kda_role, jar_object_key)
 
         # Allow reading from the Kinesis source stream
         kda_role.add_to_policy(

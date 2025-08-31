@@ -27,7 +27,7 @@ code_bucket = S3Stack(
     env=env
 )
 
-FlinkAppStack(
+flink = FlinkAppStack(
     app,
     "FlinkAppStack",
     env=env,
@@ -38,5 +38,7 @@ FlinkAppStack(
     kinesis_initial_position="TRIM_HORIZON",
     runtime_environment="FLINK-1_20",
 )
+
+flink.add_dependency(code_bucket)
 
 app.synth()
