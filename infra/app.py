@@ -3,6 +3,7 @@ import aws_cdk as cdk
 from stacks.kinesis_stack import KinesisStack
 from stacks.producer_stack import ProducerStack
 from stacks.s3_stack import S3Stack
+from stacks.flink_app_stack import FlinkAppStack
 
 
 app = cdk.App()
@@ -20,10 +21,22 @@ ProducerStack(
     env=env
 )
 
-S3Stack(
+code_bucket = S3Stack(
     app,
     "S3Stack",
     env=env
+)
+
+FlinkAppStack(
+    app,
+    "FlinkAppStack",
+    env=env,
+    code_bucket=code_bucket.s3,
+    jar_object_key="artifacts/KinesisS3Sink-1.0-SNAPSHOT.jar",
+    source_stream=kinesis.stream,
+    app_name="KinesisS3Sink",
+    kinesis_initial_position="TRIM_HORIZON",
+    runtime_environment="FLINK-1_20",
 )
 
 app.synth()
