@@ -1,84 +1,72 @@
 import os
 import json
-import random
 import time
-from typing import List, Dict
+from typing import Dict
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestTradeRequest
+
 
 import boto3
 
 STREAM_NAME = os.getenv("STREAM_NAME", "")
-TICKER = os.getenv("TICKER", "MSFT")
-PERIOD = os.getenv("PERIOD", "1d")       # e.g., '1d', '5d', '1mo'
-INTERVAL = os.getenv("INTERVAL", "1m")   # e.g., '1m', '5m', '15m', '1h', '1d'
+SYMBOL = os.getenv("SYMBOL", "MSFT")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
 kinesis = boto3.client("kinesis")
 
-
-def fetch_candles(symbol: str, period: str, interval: str) -> List[Dict]:
+def fetch_stock_price(symbol: str) -> Dict:
     """
-    Generate dummy OHLCV data for testing purposes.
+    Fetches the latest stock price for a given symbol using Alpaca API.
+
+    Parameters:
+        symbol (str): The stock symbol to fetch the price for.
+        api_key (str): Your Alpaca API key.
+        api_secret (str): Your Alpaca API secret.
+
+    Returns:
+        float: The latest stock price.
     """
-    records: List[Dict] = []
-    current_time = int(time.time() * 1000)
+    request = StockLatestTradeRequest(symbol_or_symbols=symbol)
+    latest_trade = get_alpaca_client(secret_name="AlpacaApiSecret").get_stock_latest_trade(request)
 
-    for i in range(5):  # Generate 5 dummy records
-        ts = current_time - i * 60000  # subtract i minutes
-        open_price = round(random.uniform(100, 200), 2)
-        high_price = round(open_price + random.uniform(0, 10), 2)
-        low_price = round(open_price - random.uniform(0, 10), 2)
-        close_price = round(random.uniform(low_price, high_price), 2)
-        volume = random.randint(1000, 10000)
-
-        payload = {
-            "symbol": symbol,
-            "ts": ts,
-            "open": open_price,
-            "high": high_price,
-            "low": low_price,
-            "close": close_price,
-            "volume": volume,
-            "interval": interval,
-            "period": period,
-            "source": "dummy-generator",
-        }
-        records.append(payload)
-
-    return records
+    # Extract the latest ask price from the response
+    latest_price = latest_trade[symbol].price
+    return {"symbol": symbol, "event_time_millis": int(time.time() * 1000), "price": latest_price}
 
 
-def put_to_kinesis(records: List[Dict]):
+def get_alpaca_client(secret_name: str) -> StockHistoricalDataClient:
+    client = boto3.client('secretsmanager')
+    response = client.get_secret_value(SecretId=secret_name)
+    secret = json.loads(response['SecretString'])
+    return StockHistoricalDataClient(secret['api_key'], secret['api_secret'])
+
+
+def put_to_kinesis(record: Dict):
     """
-    Batch put to Kinesis using put_records (max 500 per call).
+    Put a single record to Kinesis.
     """
     if not STREAM_NAME:
         raise RuntimeError("STREAM_NAME environment variable is required")
 
-    # Kinesis batch limit is 500
-    batch_size = 500
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
-        entries = [{
-            "Data": json.dumps(rec, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
-            "PartitionKey": rec.get("symbol", "pk")
-        } for rec in batch]
-        kinesis.put_records(StreamName=STREAM_NAME, Records=entries)
+    kinesis.put_record(
+        StreamName=STREAM_NAME,
+        Data=json.dumps(record, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+        PartitionKey=record.get("symbol", "pk")
+    )
 
 
-def handler(event, context):
-    records = fetch_candles(TICKER, PERIOD, INTERVAL)
+def handler(event: Dict, context: Dict):
+    price_record = fetch_stock_price(SYMBOL)
 
     if DRY_RUN:
         # Print to logs instead of Kinesis
-        return {"status": "ok", "dry_run": True, "count": len(records)}
+        return {"status": "ok", "dry_run": True}
     
-    print(json.dumps({"count": len(records), "sample": records[:3]}, indent=2))
-    put_to_kinesis(records)
-    return {"status": "ok", "dry_run": False, "count": len(records)}
+    put_to_kinesis(price_record)
+    return {"status": "ok", "dry_run": False}
 
 
 # Local convenience: run as a script for quick checks (no AWS calls when DRY_RUN=true)
 if __name__ == "__main__":
     os.environ["DRY_RUN"] = "true"
     print(handler({}, None))
-
